@@ -1,0 +1,4 @@
+module DnsBridge {
+    header "DnsBridge.h"
+    export *
+}

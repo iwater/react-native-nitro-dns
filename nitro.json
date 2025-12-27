@@ -1,0 +1,32 @@
+{
+    "$schema": "https://nitro.margelo.com/nitro.schema.json",
+    "cxxNamespace": [
+        "nitro_dns"
+    ],
+    "ios": {
+        "iosModuleName": "RNDns"
+    },
+    "android": {
+        "androidNamespace": [
+            "nitro_dns"
+        ],
+        "androidCxxLibName": "RNDns"
+    },
+    "autolinking": {
+        "NitroDns": {
+            "cpp": "HybridDns"
+        }
+    },
+    "cxx": {
+        "extraIncludeDirs": [
+            "./cpp",
+            "../rust_c_dns/include"
+        ],
+        "extraLibs": [
+            "rust_c_dns"
+        ],
+        "extraLibDirs": [
+            "./lib"
+        ]
+    }
+}

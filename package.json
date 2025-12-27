@@ -1,0 +1,47 @@
+{
+    "name": "react-native-nitro-dns",
+    "version": "0.1.5",
+    "description": "Blazing-fast Node.js `dns` for React Native. Built with Nitro (JSI) & Rust, supporting DoH/DoT/DoQ and global native network interception.",
+    "homepage": "https://github.com/iwater/react-native-nitro-dns",
+    "main": "./lib/index.js",
+    "module": "./lib/index.js",
+    "types": "./lib/index.d.ts",
+    "author": "iwater <iwater@gmail.com>",
+    "license": "ISC",
+    "keywords": [
+        "react-native",
+        "ios",
+        "android",
+        "nitro",
+        "dns",
+        "network",
+        "nodejs"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "prepare": "npm run build",
+        "copy-clib": "rm -rf ios/Frameworks/RNDns.xcframework && cp -R ../rust_c_dns/target/xcframework/RNDns.xcframework ios/Frameworks/ && mkdir -p android/libs/arm64-v8a android/libs/armeabi-v7a android/libs/x86 android/libs/x86_64 && cp ../rust_c_dns/target/aarch64-linux-android/release/librust_c_dns.so android/libs/arm64-v8a/ && cp ../rust_c_dns/target/armv7-linux-androideabi/release/librust_c_dns.so android/libs/armeabi-v7a/ && cp ../rust_c_dns/target/i686-linux-android/release/librust_c_dns.so android/libs/x86/ && cp ../rust_c_dns/target/x86_64-linux-android/release/librust_c_dns.so android/libs/x86_64/ && cp ../rust_c_dns/include/dns_ffi.h cpp/",
+        "copy-clib-ios": "rm -rf ios/Frameworks/RNDns.xcframework && cp -R ../rust_c_dns/target/xcframework/RNDns.xcframework ios/Frameworks/",
+        "copy-clib-android": "cp ../rust_c_dns/target/aarch64-linux-android/release/librust_c_dns.so android/libs/arm64-v8a/ && cp ../rust_c_dns/target/armv7-linux-androideabi/release/librust_c_dns.so android/libs/armeabi-v7a/ && cp ../rust_c_dns/target/i686-linux-android/release/librust_c_dns.so android/libs/x86/ && cp ../rust_c_dns/target/x86_64-linux-android/release/librust_c_dns.so android/libs/x86_64/ && cp ../rust_c_dns/include/dns_ffi.h cpp/",
+        "nitrogen": "nitrogen"
+    },
+    "peerDependencies": {
+        "react-native-nitro-modules": "^0.32.0"
+    },
+    "devDependencies": {
+        "@types/node": "*",
+        "nitrogen": "^0.32.0",
+        "react-native-nitro-modules": "^0.32.0",
+        "typescript": "^5.3.3"
+    },
+    "packageManager": "yarn@4.12.0",
+    "files": [
+        "lib/",
+        "src/",
+        "cpp/",
+        "ios/",
+        "android/",
+        "nitrogen/",
+        "*.podspec"
+    ]
+}
