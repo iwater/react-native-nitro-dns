@@ -1,8 +1,10 @@
 #pragma once
 
+#include "CachePolicy.hpp"
 #include "HybridNitroDnsSpec.hpp"
 #include <NitroModules/Promise.hpp>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace margelo {
@@ -48,6 +50,7 @@ public:
   std::shared_ptr<Promise<std::string>> reverse(const std::string &ip) override;
 
   void setLocalAddress(const std::string &v4, const std::string &v6) override;
+  void clearCache() override;
 
 private:
   int32_t id_;
@@ -94,6 +97,9 @@ public:
   lookupService(const std::string &address, double port) override;
   void setNativeInterceptionEnabled(bool enabled) override;
   void setVerbose(bool enabled) override;
+  void clearCache() override;
+  void setCacheSize(double size) override;
+  void setCachePolicy(CachePolicy policy, double staleTtl) override;
 };
 
 } // namespace nitro_dns

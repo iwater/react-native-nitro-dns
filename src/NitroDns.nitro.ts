@@ -26,6 +26,14 @@ export interface NitroResolver extends HybridObject<{ ios: 'swift', android: 'ko
     reverse(ip: string): Promise<string>
 
     setLocalAddress(v4: string, v6: string): void
+    clearCache(): void
+}
+
+export enum CachePolicy {
+    FollowDnsTtl = 0,
+    Bypass = 1,
+    StaleWhileRevalidate = 2,
+    StaleIfError = 3,
 }
 
 export interface NitroDns extends HybridObject<{ ios: 'swift', android: 'kotlin' }> {
@@ -62,4 +70,7 @@ export interface NitroDns extends HybridObject<{ ios: 'swift', android: 'kotlin'
      */
     setNativeInterceptionEnabled(enabled: boolean): void
     setVerbose(enabled: boolean): void
+    clearCache(): void
+    setCacheSize(size: number): void
+    setCachePolicy(policy: CachePolicy, staleTtl: number): void
 }

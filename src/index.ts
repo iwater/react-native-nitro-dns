@@ -1,10 +1,16 @@
 import { NitroModules } from 'react-native-nitro-modules'
-import type { NitroDns, NitroResolver } from './NitroDns.nitro'
+import {
+    type NitroDns,
+    type NitroResolver,
+    CachePolicy
+} from './NitroDns.nitro'
 
 const NitroDnsModule = NitroModules.createHybridObject<NitroDns>('NitroDns')
 
+export { CachePolicy };
+
 // Types
-interface LookupOptions {
+export interface LookupOptions {
     family?: number;
     hints?: number;
     all?: boolean;
@@ -12,12 +18,14 @@ interface LookupOptions {
     order?: 'ipv4first' | 'ipv6first' | 'verbatim';
 }
 
-interface LookupAddress {
+export interface LookupAddress {
     address: string;
     family: number;
 }
 
-type LookupCallback = (err: Error | null, address: string | LookupAddress[], family?: number) => void;
+export type LookupServiceCallback = (err: Error | null, hostname: string, service: string) => void;
+export type LookupCallback = (err: Error | null, address: string | LookupAddress[], family?: number) => void;
+export type ResolveCallback = (err: Error | null, records: any) => void;
 
 // Constants
 export const ADDRCONFIG = 1;
@@ -58,7 +66,7 @@ function createError(code: string, message: string, hostname?: string) {
 // Lookup
 // --------------------------------------------------------------------------
 export function lookup(hostname: string, options?: number | LookupOptions | LookupCallback, callback?: LookupCallback): void {
-    let cb: LookupCallback | undefined;
+    let cb: any;
     let opts: LookupOptions = {};
 
     if (typeof options === 'function') {
@@ -128,8 +136,6 @@ export function lookup(hostname: string, options?: number | LookupOptions | Look
 }
 
 
-// ...
-
 // --------------------------------------------------------------------------
 // Lookup Service
 // --------------------------------------------------------------------------
@@ -137,7 +143,7 @@ export function lookupService(address: string, port: number, callback: (err: Err
     NitroDnsModule.lookupService(address, port).then(json => {
         const res = JSON.parse(json);
         callback(null, res.hostname, res.service);
-    }).catch(e => {
+    }).catch((e: any) => {
         const err = createError('ENOTFOUND', 'lookupService failed');
         callback(err, "", "");
     });
@@ -150,7 +156,7 @@ export function lookupService(address: string, port: number, callback: (err: Err
 export class Resolver {
     private _nitroResolver: NitroResolver;
 
-    constructor(options?: { servers?: string[], timeout?: number, tries?: number, maxTimeout?: number }) {
+    constructor(options?: { servers?: string[], timeout?: number, tries?: number, maxTimeout?: number, cacheSize?: number }) {
         let configJson: string | undefined = undefined;
         if (options) {
             const config: any = {};
@@ -158,6 +164,7 @@ export class Resolver {
             if (options.timeout !== undefined) config.timeout = options.timeout; // -1 or >0
             if (options.tries !== undefined) config.attempts = options.tries;
             if (options.maxTimeout !== undefined) config.maxTimeout = options.maxTimeout;
+            if (options.cacheSize !== undefined) config.cacheSize = options.cacheSize;
             if (Object.keys(config).length > 0) {
                 configJson = JSON.stringify(config);
             }
@@ -181,35 +188,39 @@ export class Resolver {
         this._nitroResolver.setLocalAddress(ipv4 || '0.0.0.0', ipv6 || '::0');
     }
 
-    resolve(hostname: string, rrtype: string = 'A', callback: Function): void {
+    clearCache(): void {
+        this._nitroResolver.clearCache();
+    }
+
+    resolve(hostname: string, rrtype: string = 'A', callback: ResolveCallback): void {
         resolveDispatch(this._nitroResolver, hostname, rrtype, callback);
     }
 
-    resolve4(hostname: string, options?: any, callback?: Function): void {
+    resolve4(hostname: string, options?: any, callback?: ResolveCallback): void {
         let cb = callback || (typeof options === 'function' ? options : undefined);
         let opts = (typeof options === 'object') ? options : {};
         resolveHelperIp(this._nitroResolver.resolveipv4.bind(this._nitroResolver), hostname, opts, cb);
     }
 
-    resolve6(hostname: string, options?: any, callback?: Function): void {
+    resolve6(hostname: string, options?: any, callback?: ResolveCallback): void {
         let cb = callback || (typeof options === 'function' ? options : undefined);
         let opts = (typeof options === 'object') ? options : {};
         resolveHelperIp(this._nitroResolver.resolveipv6.bind(this._nitroResolver), hostname, opts, cb);
     }
 
-    resolveAny(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveAny.bind(this._nitroResolver), hostname, callback); }
-    resolveCname(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveCname.bind(this._nitroResolver), hostname, callback); }
-    resolveMx(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveMx.bind(this._nitroResolver), hostname, callback); }
-    resolveNaptr(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveNaptr.bind(this._nitroResolver), hostname, callback); }
-    resolveNs(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveNs.bind(this._nitroResolver), hostname, callback); }
-    resolvePtr(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolvePtr.bind(this._nitroResolver), hostname, callback); }
-    resolveSoa(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveSoa.bind(this._nitroResolver), hostname, callback); }
-    resolveSrv(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveSrv.bind(this._nitroResolver), hostname, callback); }
-    resolveCaa(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveCaa.bind(this._nitroResolver), hostname, callback); }
-    resolveTxt(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveTxt.bind(this._nitroResolver), hostname, callback); }
-    resolveTlsa(hostname: string, callback: Function) { resolveHelper(this._nitroResolver.resolveTlsa.bind(this._nitroResolver), hostname, callback); }
+    resolveAny(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveAny.bind(this._nitroResolver), hostname, callback); }
+    resolveCname(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveCname.bind(this._nitroResolver), hostname, callback); }
+    resolveMx(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveMx.bind(this._nitroResolver), hostname, callback); }
+    resolveNaptr(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveNaptr.bind(this._nitroResolver), hostname, callback); }
+    resolveNs(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveNs.bind(this._nitroResolver), hostname, callback); }
+    resolvePtr(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolvePtr.bind(this._nitroResolver), hostname, callback); }
+    resolveSoa(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveSoa.bind(this._nitroResolver), hostname, callback); }
+    resolveSrv(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveSrv.bind(this._nitroResolver), hostname, callback); }
+    resolveCaa(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveCaa.bind(this._nitroResolver), hostname, callback); }
+    resolveTxt(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveTxt.bind(this._nitroResolver), hostname, callback); }
+    resolveTlsa(hostname: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.resolveTlsa.bind(this._nitroResolver), hostname, callback); }
 
-    reverse(ip: string, callback: Function) { resolveHelper(this._nitroResolver.reverse.bind(this._nitroResolver), ip, callback); }
+    reverse(ip: string, callback: ResolveCallback) { resolveHelper(this._nitroResolver.reverse.bind(this._nitroResolver), ip, callback); }
 }
 
 // --------------------------------------------------------------------------
@@ -228,15 +239,15 @@ export function setServers(servers: string[]): void {
 function resolveHelper<T>(
     promiseCall: (host: string) => Promise<string>,
     hostname: string,
-    callback?: Function,
+    callback?: ResolveCallback,
     transform?: (data: any) => T
 ) {
     if (!callback) return;
     promiseCall(hostname).then(json => {
         const data = JSON.parse(json);
         callback(null, transform ? transform(data) : data);
-    }).catch(err => {
-        callback(err);
+    }).catch((err: any) => {
+        callback(err, null);
     });
 }
 
@@ -245,27 +256,25 @@ function resolveHelperIp(
     promiseCall: (host: string) => Promise<string>,
     hostname: string,
     options: { ttl?: boolean },
-    callback?: Function
+    callback?: ResolveCallback
 ) {
     if (!callback) return;
     promiseCall(hostname).then(json => {
         const data = JSON.parse(json); // [{address, ttl, family}]
         if (options && options.ttl) {
-            // Filter to address and ttl only? standard returns {address, ttl}
             const result = data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
             callback(null, result);
         } else {
-            // Return only addresses
             const result = data.map((d: any) => d.address);
             callback(null, result);
         }
-    }).catch(err => {
-        callback(err);
+    }).catch((err: any) => {
+        callback(err, null);
     });
 }
 
 
-function resolveDispatch(resolver: NitroResolver | NitroDns, hostname: string, rrtype: string | Function, callback?: Function) {
+function resolveDispatch(resolver: any, hostname: string, rrtype: string | ResolveCallback, callback?: ResolveCallback) {
     let type = 'A';
     let cb: any = callback;
     if (typeof rrtype === 'function') {
@@ -290,9 +299,9 @@ function resolveDispatch(resolver: NitroResolver | NitroDns, hostname: string, r
         case 'SRV': p = r.resolveSrv(hostname); break;
         case 'TXT': p = r.resolveTxt(hostname); break;
         case 'CAA': p = r.resolveCaa(hostname); break;
-        case 'TLSA': p = r.resolveTlsa ? r.resolveTlsa(hostname) : r.resolveTlsa(hostname); break;
+        case 'TLSA': p = r.resolveTlsa(hostname); break;
         default:
-            if (cb) cb(new Error(`Unknown rrtype: ${type}`));
+            if (cb) cb(new Error(`Unknown rrtype: ${type}`), null);
             return;
     }
 
@@ -303,40 +312,40 @@ function resolveDispatch(resolver: NitroResolver | NitroDns, hostname: string, r
                 res = res.map((r: any) => r.address);
             }
             cb(null, res)
-        }).catch(e => cb(e));
+        }).catch((e: any) => cb(e, null));
     }
 }
 
 
-export function resolve(hostname: string, rrtype: string = 'A', callback: Function): void {
+export function resolve(hostname: string, rrtype: string = 'A', callback: ResolveCallback): void {
     resolveDispatch(NitroDnsModule, hostname, rrtype, callback);
 }
 
-export function resolve4(hostname: string, options?: any, callback?: Function): void {
+export function resolve4(hostname: string, options?: any, callback?: ResolveCallback): void {
     let cb = callback || (typeof options === 'function' ? options : undefined);
     let opts = (typeof options === 'object') ? options : {};
     resolveHelperIp(NitroDnsModule.resolve4.bind(NitroDnsModule), hostname, opts, cb);
 }
 
-export function resolve6(hostname: string, options?: any, callback?: Function): void {
+export function resolve6(hostname: string, options?: any, callback?: ResolveCallback): void {
     let cb = callback || (typeof options === 'function' ? options : undefined);
     let opts = (typeof options === 'object') ? options : {};
     resolveHelperIp(NitroDnsModule.resolve6.bind(NitroDnsModule), hostname, opts, cb);
 }
 
-export function resolveAny(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveAny.bind(NitroDnsModule), hostname, callback); }
-export function resolveCname(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveCname.bind(NitroDnsModule), hostname, callback); }
-export function resolveMx(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveMx.bind(NitroDnsModule), hostname, callback); }
-export function resolveNaptr(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveNaptr.bind(NitroDnsModule), hostname, callback); }
-export function resolveNs(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveNs.bind(NitroDnsModule), hostname, callback); }
-export function resolvePtr(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolvePtr.bind(NitroDnsModule), hostname, callback); }
-export function resolveSoa(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveSoa.bind(NitroDnsModule), hostname, callback); }
-export function resolveSrv(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveSrv.bind(NitroDnsModule), hostname, callback); }
-export function resolveCaa(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveCaa.bind(NitroDnsModule), hostname, callback); }
-export function resolveTxt(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveTxt.bind(NitroDnsModule), hostname, callback); }
-export function resolveTlsa(hostname: string, callback: Function) { resolveHelper(NitroDnsModule.resolveTlsa.bind(NitroDnsModule), hostname, callback); }
+export function resolveAny(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveAny.bind(NitroDnsModule), hostname, callback); }
+export function resolveCname(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveCname.bind(NitroDnsModule), hostname, callback); }
+export function resolveMx(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveMx.bind(NitroDnsModule), hostname, callback); }
+export function resolveNaptr(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveNaptr.bind(NitroDnsModule), hostname, callback); }
+export function resolveNs(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveNs.bind(NitroDnsModule), hostname, callback); }
+export function resolvePtr(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolvePtr.bind(NitroDnsModule), hostname, callback); }
+export function resolveSoa(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveSoa.bind(NitroDnsModule), hostname, callback); }
+export function resolveSrv(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveSrv.bind(NitroDnsModule), hostname, callback); }
+export function resolveCaa(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveCaa.bind(NitroDnsModule), hostname, callback); }
+export function resolveTxt(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveTxt.bind(NitroDnsModule), hostname, callback); }
+export function resolveTlsa(hostname: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.resolveTlsa.bind(NitroDnsModule), hostname, callback); }
 
-export function reverse(ip: string, callback: Function) { resolveHelper(NitroDnsModule.reverse.bind(NitroDnsModule), ip, callback); }
+export function reverse(ip: string, callback: ResolveCallback) { resolveHelper(NitroDnsModule.reverse.bind(NitroDnsModule), ip, callback); }
 
 export function setNativeInterceptionEnabled(enabled: boolean): void {
     NitroDnsModule.setNativeInterceptionEnabled(enabled);
@@ -344,6 +353,18 @@ export function setNativeInterceptionEnabled(enabled: boolean): void {
 
 export function setVerbose(enabled: boolean): void {
     NitroDnsModule.setVerbose(enabled);
+}
+
+export function clearCache(): void {
+    NitroDnsModule.clearCache();
+}
+
+export function setCacheSize(size: number): void {
+    NitroDnsModule.setCacheSize(size);
+}
+
+export function setCachePolicy(policy: CachePolicy, staleTtl: number = 3600): void {
+    NitroDnsModule.setCachePolicy(policy, staleTtl);
 }
 
 // --------------------------------------------------------------------------
@@ -369,9 +390,9 @@ export class ResolverPromises {
     getServers() { return this._r.getServers(); }
     setServers(s: string[]) { this._r.setServers(s); }
     cancel() { this._r.cancel(); }
+    clearCache() { this._r.clearCache(); }
 
     resolve(hostname: string, rrtype: string = 'A') { return new Promise((res, rej) => this._r.resolve(hostname, rrtype, (e: any, d: any) => e ? rej(e) : res(d))); }
-    // Clean wrapper using handlePromiseIp
     resolve4(hostname: string, options?: any) { return handlePromiseIp((h) => (this._r as any)._nitroResolver.resolveipv4(h), hostname, options); }
     resolve6(hostname: string, options?: any) { return handlePromiseIp((h) => (this._r as any)._nitroResolver.resolveipv6(h), hostname, options); }
 
@@ -415,6 +436,10 @@ export const promises = {
     resolveTlsa: async (hostname: string) => handlePromise(NitroDnsModule.resolveTlsa.bind(NitroDnsModule), hostname),
     reverse: async (ip: string) => handlePromise(NitroDnsModule.reverse.bind(NitroDnsModule), ip),
 
+    clearCache: async () => NitroDnsModule.clearCache(),
+    setCacheSize: async (size: number) => NitroDnsModule.setCacheSize(size),
+    setCachePolicy: async (policy: CachePolicy, staleTtl: number = 3600) => NitroDnsModule.setCachePolicy(policy, staleTtl),
+
     Resolver: ResolverPromises
 };
 
@@ -440,6 +465,9 @@ export default {
     reverse,
     setNativeInterceptionEnabled,
     setVerbose,
+    clearCache,
+    setCacheSize,
+    setCachePolicy,
     Resolver,
     promises,
     setDefaultResultOrder,

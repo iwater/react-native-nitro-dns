@@ -20,6 +20,7 @@
 - 🔌 **Global Interception**: Intercept all native network requests (`fetch`, `XMLHttpRequest`, etc.) and apply custom resolution rules.
 - 🌐 **Cross-Platform Consistency**: Unified logic for Android (OkHttp Hook) and iOS (NSURLProtocol).
 - 🧩 **Advanced Config**: SNI override (Bootstrap IP), timeout management, retry logic, and IPv4/IPv6 prioritization.
+- ⚡ **Enhanced Caching**: High-performance native cache with **Stale-While-Revalidate (SWR)** and **Stale-If-Error (SIE)** support.
 
 ---
 
@@ -94,6 +95,21 @@ dns.setNativeInterceptionEnabled(true);
 const res = await fetch('https://my-secure-api.com');
 ```
 
+### 4. High-Performance Caching
+
+Optimize resolution speed and reliability with advanced caching policies.
+
+```typescript
+import dns, { CachePolicy } from 'react-native-nitro-dns';
+
+// Set global cache size
+dns.setCacheSize(1000);
+
+// Set global cache policy to Stale-While-Revalidate (SWR)
+// Serves stale data immediately while refreshing in background
+dns.setCachePolicy(CachePolicy.StaleWhileRevalidate, 86400); // 1 day grace
+```
+
 ---
 
 ## 📖 API Reference
@@ -109,6 +125,9 @@ const res = await fetch('https://my-secure-api.com');
 | `resolveTxt` | Resolves Text records | `string[][]` | - |
 | `resolveTlsa` | Resolves DANE fingerprints | `TLSA[]` | - |
 | `lookupService` | Reverse lookup for IP/Port | `{hostname, service}` | - |
+| `clearCache` | Clears all DNS caches | `void` | - |
+| `setCacheSize` | Sets global cache size | `void` | Default is 32 |
+| `setCachePolicy`| Sets global cache strategy | `void` | Supports SWR/SIE policies |
 
 ### Constants
 
@@ -155,7 +174,8 @@ If you need isolated DNS configurations (e.g., for different environments):
 ```typescript
 const customResolver = new dns.Resolver({
   timeout: 3000,   // ms
-  tries: 2         // retry attempts
+  tries: 2,        // retry attempts
+  cacheSize: 500   // instance-specific cache capacity
 });
 customResolver.setServers(['1.1.1.1']);
 const ips = await customResolver.promises.resolve4('github.com');
@@ -174,6 +194,17 @@ dns.setServers(['https://8.8.8.8/dns-query#dns.google']);
 // Force connect to 223.5.5.5 for DoT, using dns.alidns.com for SNI
 dns.setServers(['tls://223.5.5.5#dns.alidns.com']);
 ```
+
+### Caching Policies
+
+The `CachePolicy` enum defines how the internal and background caches behave:
+
+| Policy | Description |
+| :--- | :--- |
+| `FollowDnsTtl` (0) | Default. Strictly follows the TTL returned by DNS servers. |
+| `Bypass` (1) | Disables all caching; every request hits the network. |
+| `StaleWhileRevalidate` (2) | Returns stale data immediately if available while fetching fresh data in the background (refreshed on subsequent calls). |
+| `StaleIfError` (3) | Returns stale data if the DNS server is unreachable or returns an error. |
 
 ---
 

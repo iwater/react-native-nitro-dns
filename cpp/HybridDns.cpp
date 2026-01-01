@@ -127,6 +127,8 @@ void HybridResolver::setLocalAddress(const std::string &v4,
                                      const std::string &v6) {
   dns_resolver_set_local_address(id_, v4.c_str(), v6.c_str());
 }
+
+void HybridResolver::clearCache() { dns_resolver_clear_cache(id_); }
 // Base64 helper if needed, but resolveTxt supports it naturally via buffer?
 // Node: resolveTxt returns arrays of strings.
 // If we need base64 specific for other types, fine.
@@ -230,6 +232,17 @@ void HybridDns::setNativeInterceptionEnabled(bool enabled) {
 extern "C" void dns_set_verbose(bool enabled);
 
 void HybridDns::setVerbose(bool enabled) { dns_set_verbose(enabled); }
+
+void HybridDns::clearCache() { dns_clear_cache(); }
+
+void HybridDns::setCacheSize(double size) {
+  dns_set_cache_size(static_cast<size_t>(size));
+}
+
+void HybridDns::setCachePolicy(CachePolicy policy, double staleTtl) {
+  dns_set_cache_policy(static_cast<int32_t>(policy),
+                       static_cast<uint32_t>(staleTtl));
+}
 
 } // namespace margelo::nitro::nitro_dns
 

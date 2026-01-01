@@ -19,6 +19,7 @@
 - 🔌 **全局网络拦截**：一键拦截 App 内所有原生请求（`fetch`, `XMLHttpRequest` 等）并应用自定义解析规则。
 - 🌐 **跨平台行为一致**：Android (通过 OkHttp Hook 注入) 和 iOS (基于 NSURLProtocol) 实现，逻辑完全同步。
 - 🧩 **进阶配置**：支持 SNI 覆盖（Bootstrap IP）、超时管理、重试次数及 IPv4/IPv6 优先级排序。
+- ⚡ **增强缓存**：Rust 原生层级缓存，支持 **Stale-While-Revalidate (SWR)** 和 **Stale-If-Error (SIE)** 策略。
 
 ---
 
@@ -93,6 +94,21 @@ dns.setNativeInterceptionEnabled(true);
 const res = await fetch('https://my-secure-api.com');
 ```
 
+### 4. 高性能缓存控制
+
+通过灵活的缓存策略优化解析速度和可靠性。
+
+```typescript
+import dns, { CachePolicy } from 'react-native-nitro-dns';
+
+// 设置全局缓存条目上限
+dns.setCacheSize(1000);
+
+// 设置全局缓存策略为 SWR (过期重新验证)
+// 如果存在过期数据则立即返回，并在后台异步刷新结果
+dns.setCachePolicy(CachePolicy.StaleWhileRevalidate, 86400); // 1天过期宽限期
+```
+
 ---
 
 ## 📖 API 详细参考
@@ -108,6 +124,9 @@ const res = await fetch('https://my-secure-api.com');
 | `resolveTxt` | `hostname` | `string[][]` | 解析文本记录 |
 | `resolveTlsa` | `hostname` | `TLSA[]` | 解析 DANE 安全证书指纹 |
 | `lookupService` | `address, port` | `{hostname, service}` | 根据 IP 端口查主机名 |
+| `clearCache` | - | `void` | 清空所有 DNS 缓存 |
+| `setCacheSize` | `size: number` | `void` | 设置全局缓存容量 (默认 32) |
+| `setCachePolicy`| `policy, staleTtl` | `void` | 设置全局缓存策略 (支持 SWR/SIE) |
 
 ### 常量支持
 
@@ -154,7 +173,8 @@ dns.setServers([
 ```typescript
 const customResolver = new dns.Resolver({
   timeout: 3000,   // 超时 (ms)
-  tries: 2         // 重试次数
+  tries: 2,        // 重试次数
+  cacheSize: 500   // 该实例独享的缓存容量
 });
 customResolver.setServers(['1.1.1.1']);
 const ips = await customResolver.promises.resolve4('github.com');
@@ -173,6 +193,17 @@ dns.setServers(['https://8.8.8.8/dns-query#dns.google']);
 // 强制连接 223.5.5.5 的 DoT，TLS 校验使用 dns.alidns.com
 dns.setServers(['tls://223.5.5.5#dns.alidns.com']);
 ```
+
+### 缓存策略说明
+
+`CachePolicy` 枚举定义了内部缓存与后台缓存的行为模式：
+
+| 策略 | 说明 |
+| :--- | :--- |
+| `FollowDnsTtl` (0) | **默认值**。严格遵循 DNS 服务器返回的 TTL 时间。 |
+| `Bypass` (1) | 禁用所有缓存，每次解析都将发起网络请求。 |
+| `StaleWhileRevalidate` (2) | **SWR**。如果缓存已过期但仍在宽限期内，立即返回过期数据并在后台异步刷新，刷新结果将在下次调用时生效。 |
+| `StaleIfError` (3) | **SIE**。如果 DNS 请求失败或超时，且缓存中存在过期数据（在宽限期内），则返回该过期数据作为兜底。 |
 
 ---
 

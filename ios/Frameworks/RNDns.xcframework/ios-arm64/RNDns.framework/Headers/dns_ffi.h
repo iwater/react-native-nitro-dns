@@ -1,4 +1,5 @@
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -21,6 +22,10 @@ int32_t dns_resolver_new(const char *servers_json);
 void dns_resolver_delete(int32_t id);
 DnsResult dns_resolver_get_servers(int32_t id);
 void dns_resolver_set_local_address(int32_t id, const char *v4, const char *v6);
+void dns_resolver_clear_cache(int32_t id);
+void dns_clear_cache();
+void dns_set_cache_size(size_t size);
+void dns_set_cache_policy(int32_t policy, uint32_t stale_ttl);
 
 // System Lookup
 // System Lookup
