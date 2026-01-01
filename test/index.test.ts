@@ -1,5 +1,5 @@
 
-import { setServers } from './src/index';
+import { setServers } from '../src/index';
 
 // Mock NitroModules
 const mockNitroDns = {
