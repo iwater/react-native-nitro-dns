@@ -27,16 +27,10 @@ export type LookupServiceCallback = (err: Error | null, hostname: string, servic
 export type LookupCallback = (err: Error | null, address: string | LookupAddress[], family?: number) => void;
 export type ResolveCallback = (err: Error | null, records: any) => void;
 
-// Constants
-export const ADDRCONFIG = 1;
-export const V4MAPPED = 2;
-export const ALL = 4;
-
-export const HINTS = {
-    ADDRCONFIG: 1024,
-    V4MAPPED: 2048,
-    ALL: 256,
-};
+// Constants（与 Node 对齐：getaddrinfo 的 AI_* 实际值；Node 没有 HINTS 导出）
+export const ADDRCONFIG = 1024;
+export const V4MAPPED = 2048;
+export const ALL = 256;
 
 let defaultResultOrder: 'ipv4first' | 'ipv6first' | 'verbatim' = 'verbatim';
 
@@ -60,6 +54,66 @@ function createError(code: string, message: string, hostname?: string) {
     err.code = code;
     err.hostname = hostname;
     return err;
+}
+
+// --------------------------------------------------------------------------
+// Node 兼容的参数校验（lookupService 用）
+// isIP 正则逐字移植自 node v22 lib/internal/net.js；校验顺序、错误类型与
+// code 对齐 lib/dns.js 的 lookupService 与 lib/internal/validators.js 的
+// validatePort（均为同步抛出）。
+// --------------------------------------------------------------------------
+const _v4Seg = '(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])';
+const _v4Str = `(?:${_v4Seg}\\.){3}${_v4Seg}`;
+const _IPv4Reg = new RegExp(`^${_v4Str}$`);
+const _v6Seg = '(?:[0-9a-fA-F]{1,4})';
+const _IPv6Reg = new RegExp('^(?:' +
+    `(?:${_v6Seg}:){7}(?:${_v6Seg}|:)|` +
+    `(?:${_v6Seg}:){6}(?:${_v4Str}|:${_v6Seg}|:)|` +
+    `(?:${_v6Seg}:){5}(?::${_v4Str}|(?::${_v6Seg}){1,2}|:)|` +
+    `(?:${_v6Seg}:){4}(?:(?::${_v6Seg}){0,1}:${_v4Str}|(?::${_v6Seg}){1,3}|:)|` +
+    `(?:${_v6Seg}:){3}(?:(?::${_v6Seg}){0,2}:${_v4Str}|(?::${_v6Seg}){1,4}|:)|` +
+    `(?:${_v6Seg}:){2}(?:(?::${_v6Seg}){0,3}:${_v4Str}|(?::${_v6Seg}){1,5}|:)|` +
+    `(?:${_v6Seg}:){1}(?:(?::${_v6Seg}){0,4}:${_v4Str}|(?::${_v6Seg}){1,6}|:)|` +
+    `(?::(?:(?::${_v6Seg}){0,5}:${_v4Str}|(?::${_v6Seg}){1,7}|:))` +
+')(?:%[0-9a-zA-Z-.:]{1,})?$');
+
+function _isIP(s: any): number {
+    if (typeof s !== 'string') return 0;
+    if (_IPv4Reg.test(s)) return 4;
+    if (_IPv6Reg.test(s)) return 6;
+    return 0;
+}
+
+function _inspect(v: any): string {
+    return typeof v === 'string' ? `'${v}'` : String(v);
+}
+
+function _throwInvalidArgValue(name: string, value: any): never {
+    const err: any = new TypeError(`The argument '${name}' is invalid. Received ${_inspect(value)}`);
+    err.code = 'ERR_INVALID_ARG_VALUE';
+    throw err;
+}
+
+// node:internal/validators validatePort 的逐字移植（lookupService 处恒为
+// name='Port', allowZero=true，故去掉 allowZero 参数与 `port === 0` 分支）
+function _validatePort(port: any): void {
+    if ((typeof port !== 'number' && typeof port !== 'string') ||
+        (typeof port === 'string' && port.trim().length === 0) ||
+        +port !== (+port >>> 0) ||
+        Number(port) > 0xFFFF) {
+        const err: any = new RangeError(
+            `Port should be >= 0 and < 65536. Received type ${typeof port} (${_inspect(port)}).`);
+        err.code = 'ERR_SOCKET_BAD_PORT';
+        throw err;
+    }
+}
+
+// callback 与 promises 两个入口共享的输入校验（同步抛，与 Node 一致）
+function _validateLookupServiceInput(address: any, port: any): void {
+    if (_isIP(address) === 0) {
+        _throwInvalidArgValue('address', address);
+    }
+    _validatePort(port);
 }
 
 // --------------------------------------------------------------------------
@@ -140,6 +194,21 @@ export function lookup(hostname: string, options?: number | LookupOptions | Look
 // Lookup Service
 // --------------------------------------------------------------------------
 export function lookupService(address: string, port: number, callback: (err: Error | null, hostname: string, service: string) => void): void {
+    // 校验与 node:dns.lookupService 同序、同步抛出（lib/dns.js，Node v22）
+    if (arguments.length !== 3) {
+        const err: any = new TypeError(
+            'The "address", "port", and "callback" arguments must be specified');
+        err.code = 'ERR_MISSING_ARGS';
+        throw err;
+    }
+    _validateLookupServiceInput(address, port);
+    if (typeof callback !== 'function') {
+        const err: any = new TypeError(
+            `Callback must be a function. Received ${_inspect(callback)}`);
+        err.code = 'ERR_INVALID_CALLBACK';
+        throw err;
+    }
+    port = +port;
     NitroDnsModule.lookupService(address, port).then(json => {
         const res = JSON.parse(json);
         callback(null, res.hostname, res.service);
@@ -417,8 +486,11 @@ export const promises = {
     lookup: async (hostname: string, options?: any) => {
         return new Promise((res, rej) => lookup(hostname, options, (err, address, family) => err ? rej(err) : res({ address, family } as any)));
     },
-    lookupService: async (address: string, port: number) => {
-        return new Promise((res, rej) => lookupService(address, port, (err, hostname, service) => err ? rej(err) : res({ hostname, service } as any)));
+    lookupService: (address: string, port: number) => {
+        // 与 Node 的 promises.lookupService 一致：输入校验**同步抛出**（在创建
+        // Promise 之前），见 node:internal/dns/promises 的 lookupService
+        _validateLookupServiceInput(address, port);
+        return new Promise((res, rej) => lookupService(address, +port, (err, hostname, service) => err ? rej(err) : res({ hostname, service } as any)));
     },
     resolve: async (hostname: string, rrtype: string = 'A') => new Promise((res, rej) => resolve(hostname, rrtype, (e: any, d: any) => e ? rej(e) : res(d))),
     resolve4: async (hostname: string, options?: any) => new Promise((res, rej) => resolve4(hostname, options, (e: any, d: any) => e ? rej(e) : res(d))),
