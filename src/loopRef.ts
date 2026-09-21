@@ -1,18 +1,18 @@
 /**
- * LoopRef —— Node 的「在途请求 / 长寿命 handle 顶住事件循环」语义到
- * **宿主能力**的桥。
+ * LoopRef —— Node handle-ref 模型到「宿主能力」的桥。
  *
- * 背景：Node 里在途的异步请求本身就会让 libuv 的 loop 不退出（active request），
- * 本库的宿主未必有这个语义：
+ * 背景：Node 里 listening server / connected socket 本身就顶住事件循环
+ * （libuv 的 handle ref）。本库的宿主未必有这个语义：
  *   - qjs-node / qjs-run（quickjs-jsi）：EventLoop 在「无待办」时收泵，
- *     提供 globalThis.__qjsHandleRef 供库登记存活；
+ *     提供 globalThis.__qjsHandleRef 供库登记 handle 存活；
  *   - React Native：App 生命周期归 OS，JS 空转不退出 —— 没有这个全局，
  *     本类所有方法是 no-op，行为与今天完全一致。
  *
- * 与 react-native-nitro-net 的同名文件**逐字相同**（约定各库各持一份、独立演进，
- * 不抽共享包）。两种用法：
- *   - handle 型：每 handle 一个实例，acquire/release 幂等；
- *   - 请求型：发起时 acquire、settle 时 release（成功失败都要，见 index.ts）。
+ * 每 handle 一个 LoopRef 实例；acquire/release 幂等（重复调用不双计/不双减）。
+ *
+ * 与 react-native-nitro-net / -udp / react-native-nitro-http-server 的同名文件
+ * **逐字相同**（约定各库各持一份、独立演进，不抽共享包）。本库用到的是
+ * **请求型**：发起时 acquire、settle 时 release（见 index.ts 的 trackRequest）。
  */
 
 interface HostHandleRef {
@@ -24,15 +24,18 @@ interface HostHandleRef {
 let host: HostHandleRef | undefined =
   (globalThis as { __qjsHandleRef?: HostHandleRef }).__qjsHandleRef;
 
-/** 仅测试用：替换/清除探测到的宿主能力。 */
+/** 仅测试用：替换/清除探测到的宿主能力。必须在创建 LoopRef 实例之前调用 —— 存活实例持有的 token 仍由上一个宿主签发。 */
 export function __setHostHandleRefForTest(h: HostHandleRef | undefined): void {
   host = h;
 }
 
 export class LoopRef {
   private token: number | null = null;
+  private readonly label: string;
 
-  constructor(private readonly label: string) {}
+  constructor(label: string) {
+    this.label = label;
+  }
 
   /** 已持有时 no-op。 */
   acquire(): void {
@@ -44,8 +47,9 @@ export class LoopRef {
   /** 未持有时 no-op。 */
   release(): void {
     if (host && this.token !== null) {
-      host.release(this.token);
+      const t = this.token;
       this.token = null;
+      host.release(t);
     }
   }
 
