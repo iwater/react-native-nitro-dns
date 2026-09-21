@@ -4,6 +4,7 @@ import {
     type NitroResolver,
     CachePolicy
 } from './NitroDns.nitro'
+import { LoopRef } from './loopRef'
 
 const NitroDnsModule = NitroModules.createHybridObject<NitroDns>('NitroDns')
 
@@ -209,12 +210,17 @@ export function lookupService(address: string, port: number, callback: (err: Err
         throw err;
     }
     port = +port;
+    const done = trackRequest();
     NitroDnsModule.lookupService(address, port).then(json => {
-        const res = JSON.parse(json);
-        callback(null, res.hostname, res.service);
+        try {
+            const res = JSON.parse(json);
+            callback(null, res.hostname, res.service);
+        } finally { done(); }
     }).catch((e: any) => {
-        const err = createError('ENOTFOUND', 'lookupService failed');
-        callback(err, "", "");
+        try {
+            const err = createError('ENOTFOUND', 'lookupService failed');
+            callback(err, "", "");
+        } finally { done(); }
     });
 }
 
@@ -304,6 +310,28 @@ export function setServers(servers: string[]): void {
     NitroDnsModule.setServers(JSON.stringify(servers));
 }
 
+// --------------------------------------------------------------------------
+// 在途请求的 handle-ref（请求型）
+// --------------------------------------------------------------------------
+//
+// 本模块的原生请求是真异步：`resolve*` / `lookupService` 返回的 Promise 要等
+// Rust 侧查完才 settle。宿主（quickjs-jsi 系）的 EventLoop 看不见这个在途请求，
+// 于是「脚本最后一个动作是 dns.resolve4(host, cb)」时 loop 会**先收泵** →
+// 回调静默丢失（实测：进程 exit 0，cb 根本不跑）。
+// Node 里没有这个问题：在途请求本身就是 loop 的活跃项。
+//
+// ⚠️ 实测澄清（2026-09-22）：`dns.lookup()` **不在此列** —— 它的原生方法是
+// **同步**返回 JSON 的（`NitroDnsModule.lookup()` 直接给字符串，没有 Promise），
+// 回调在调用栈里就跑完了，不需要登记。
+//
+// 用法：发起前 `const done = trackRequest()`，settle 后 `done()`（成功/失败都要，
+// 用 try/finally 包住回调，避免回调自己抛错时漏一次 release → 进程挂死）。
+function trackRequest(): () => void {
+    const ref = new LoopRef('dns.request');
+    ref.acquire();
+    return () => ref.release();
+}
+
 // Resolve Helpers
 function resolveHelper<T>(
     promiseCall: (host: string) => Promise<string>,
@@ -312,11 +340,14 @@ function resolveHelper<T>(
     transform?: (data: any) => T
 ) {
     if (!callback) return;
+    const done = trackRequest();
     promiseCall(hostname).then(json => {
-        const data = JSON.parse(json);
-        callback(null, transform ? transform(data) : data);
+        try {
+            const data = JSON.parse(json);
+            callback(null, transform ? transform(data) : data);
+        } finally { done(); }
     }).catch((err: any) => {
-        callback(err, null);
+        try { callback(err, null); } finally { done(); }
     });
 }
 
@@ -328,17 +359,20 @@ function resolveHelperIp(
     callback?: ResolveCallback
 ) {
     if (!callback) return;
+    const done = trackRequest();
     promiseCall(hostname).then(json => {
-        const data = JSON.parse(json); // [{address, ttl, family}]
-        if (options && options.ttl) {
-            const result = data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
-            callback(null, result);
-        } else {
-            const result = data.map((d: any) => d.address);
-            callback(null, result);
-        }
+        try {
+            const data = JSON.parse(json); // [{address, ttl, family}]
+            if (options && options.ttl) {
+                const result = data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
+                callback(null, result);
+            } else {
+                const result = data.map((d: any) => d.address);
+                callback(null, result);
+            }
+        } finally { done(); }
     }).catch((err: any) => {
-        callback(err, null);
+        try { callback(err, null); } finally { done(); }
     });
 }
 
@@ -375,13 +409,18 @@ function resolveDispatch(resolver: any, hostname: string, rrtype: string | Resol
     }
 
     if (cb) {
+        const done = trackRequest();
         p.then(s => {
-            let res = JSON.parse(s);
-            if ((type === 'A' || type === 'AAAA') && Array.isArray(res) && res.length > 0 && typeof res[0] === 'object') {
-                res = res.map((r: any) => r.address);
-            }
-            cb(null, res)
-        }).catch((e: any) => cb(e, null));
+            try {
+                let res = JSON.parse(s);
+                if ((type === 'A' || type === 'AAAA') && Array.isArray(res) && res.length > 0 && typeof res[0] === 'object') {
+                    res = res.map((r: any) => r.address);
+                }
+                cb(null, res)
+            } finally { done(); }
+        }).catch((e: any) => {
+            try { cb(e, null); } finally { done(); }
+        });
     }
 }
 
