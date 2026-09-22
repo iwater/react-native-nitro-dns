@@ -11,7 +11,8 @@
  * 每 handle 一个 LoopRef 实例；acquire/release 幂等（重复调用不双计/不双减）。
  *
  * 与 react-native-nitro-net / -udp / react-native-nitro-http-server 的同名文件
- * **逐字相同**（约定各库各持一份、独立演进，不抽共享包）。本库用到的是
+ * **代码逐字相同，仅本段头注释各持一份**（约定各库各持一份、独立演进，不抽共享包；
+ * 加这段说明本身就意味着不再是逐字相同）。本库用到的是
  * **请求型**：发起时 acquire、settle 时 release（见 index.ts 的 trackRequest）。
  */
 
