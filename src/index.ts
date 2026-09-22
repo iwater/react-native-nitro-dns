@@ -478,16 +478,27 @@ export function setCachePolicy(policy: CachePolicy, staleTtl: number = 3600): vo
 // --------------------------------------------------------------------------
 // Promises API
 // --------------------------------------------------------------------------
+// ⚠️ 这两个是**第二个入口面**（promises 面），与回调面（resolveHelper /
+// resolveHelperIp / resolveDispatch / lookupService）走的是同一批原生请求，
+// 所以同样必须登记 handle-ref —— 否则在途请求顶不住 loop、promise 永不 settle、
+// 进程静默 exit 0（这条线曾经漏掉，守卫见 quickjs-jsi 的 R29 第 ③ 段）。
+// 用 try/finally：回调（这里是 await）自己抛错时也不能漏一次 release。
 async function handlePromise(fn: (h: string) => Promise<string>, host: string) {
-    return JSON.parse(await fn(host));
+    const done = trackRequest();
+    try {
+        return JSON.parse(await fn(host));
+    } finally { done(); }
 }
 async function handlePromiseIp(fn: (h: string) => Promise<string>, host: string, options?: any) {
-    const json = await fn(host);
-    const data = JSON.parse(json);
-    if (options && options.ttl) {
-        return data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
-    }
-    return data.map((d: any) => d.address);
+    const done = trackRequest();
+    try {
+        const json = await fn(host);
+        const data = JSON.parse(json);
+        if (options && options.ttl) {
+            return data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
+        }
+        return data.map((d: any) => d.address);
+    } finally { done(); }
 }
 
 
