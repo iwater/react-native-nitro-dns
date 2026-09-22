@@ -340,8 +340,14 @@ function resolveHelper<T>(
     transform?: (data: any) => T
 ) {
     if (!callback) return;
+    // ⚠️ 先建 promise、再登记 ref：promiseCall 是 Nitro/JSI 调用，hostname 类型不对
+    // 时（Node 的 dns 收 string，用户传数字/对象就走到这里）**同步抛**。反过来的
+    // 顺序会在同步抛时留下一个永不释放的 ref → 进程挂死。两步在同一同步 tick 内，
+    // 中间 loop 不可能收泵，所以这个顺序对 ref 语义没有影响。
+    // resolveDispatch 天然就是这个顺序（promise 在 `if (cb)` 之前就已创建）。
+    const p = promiseCall(hostname);
     const done = trackRequest();
-    promiseCall(hostname).then(json => {
+    p.then(json => {
         try {
             const data = JSON.parse(json);
             callback(null, transform ? transform(data) : data);
@@ -359,8 +365,10 @@ function resolveHelperIp(
     callback?: ResolveCallback
 ) {
     if (!callback) return;
+    // 同上（resolveHelper）：先建 promise 再登记，避免 Nitro/JSI 同步抛时留下无主 ref。
+    const p = promiseCall(hostname);
     const done = trackRequest();
-    promiseCall(hostname).then(json => {
+    p.then(json => {
         try {
             const data = JSON.parse(json); // [{address, ttl, family}]
             if (options && options.ttl) {
