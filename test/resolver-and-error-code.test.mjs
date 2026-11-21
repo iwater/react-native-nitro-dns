@@ -45,7 +45,12 @@ const mockNitroDns = {
   resolve6: async () => { throw new Error(rejectWithMessage); },
   resolveAny: async () => { throw new Error(rejectWithMessage); },
   getServers: () => JSON.stringify(['8.8.8.8']),
-  lookup: () => JSON.stringify(['127.0.0.1']),
+  lookup: (host) => {
+    if (host === '127.0.0.1' || host === '::1') {
+      throw new Error(`Native lookup must not be called for IP literal: ${host}`);
+    }
+    return JSON.stringify(['93.184.216.34']);
+  },
 };
 
 const origLoad = Module._load;
@@ -103,4 +108,37 @@ test('DNS errors without err.code are normalized to Node standard codes (ENODATA
     () => dns.promises.resolveAny('slow.invalid'),
     (err) => err instanceof Error && err.code === 'ETIMEOUT'
   );
+});
+
+test('dns.lookup and dns.promises.lookup short-circuit IPv4/IPv6 literals including { all: true }', async () => {
+  await new Promise((resolve) => {
+    dns.lookup('127.0.0.1', (err, addr, fam) => {
+      assert.equal(err, null);
+      assert.equal(addr, '127.0.0.1');
+      assert.equal(fam, 4);
+      resolve();
+    });
+  });
+
+  await new Promise((resolve) => {
+    dns.lookup('127.0.0.1', { all: true }, (err, addrs) => {
+      assert.equal(err, null);
+      assert.deepEqual(addrs, [{ address: '127.0.0.1', family: 4 }]);
+      resolve();
+    });
+  });
+
+  await new Promise((resolve) => {
+    dns.lookup('::1', { all: true }, (err, addrs) => {
+      assert.equal(err, null);
+      assert.deepEqual(addrs, [{ address: '::1', family: 6 }]);
+      resolve();
+    });
+  });
+
+  const pSingle = await dns.promises.lookup('127.0.0.1');
+  assert.deepEqual(pSingle, { address: '127.0.0.1', family: 4 });
+
+  const pAll = await dns.promises.lookup('127.0.0.1', { all: true });
+  assert.deepEqual(pAll, [{ address: '127.0.0.1', family: 4 }]);
 });

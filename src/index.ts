@@ -138,6 +138,18 @@ export function lookup(hostname: string, options?: number | LookupOptions | Look
 
     const family = opts.family || 0;
 
+    // Match Node.js lib/dns.js: IP literals bypass DNS resolution and return immediately
+    const ipFamily = _isIP(hostname);
+    if (ipFamily !== 0) {
+        if (!cb) return;
+        if (opts.all) {
+            cb(null, [{ address: hostname, family: ipFamily }]);
+        } else {
+            cb(null, hostname, ipFamily);
+        }
+        return;
+    }
+
     try {
         const resJson = NitroDnsModule.lookup(hostname, family);
         let ips: string[] = JSON.parse(resJson);
@@ -563,7 +575,13 @@ export const promises = {
     getServers,
     setServers,
     lookup: async (hostname: string, options?: any) => {
-        return new Promise((res, rej) => lookup(hostname, options, (err, address, family) => err ? rej(err) : res({ address, family } as any)));
+        return new Promise((res, rej) => lookup(hostname, options, (err, address, family) => {
+            if (err) return rej(err);
+            if (options && typeof options === 'object' && options.all) {
+                return res(address as any);
+            }
+            return res({ address, family } as any);
+        }));
     },
     lookupService: (address: string, port: number) => {
         // 与 Node 的 promises.lookupService 一致：输入校验**同步抛出**（在创建
