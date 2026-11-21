@@ -326,6 +326,23 @@ export function setServers(servers: string[]): void {
 //
 // 用法：发起前 `const done = trackRequest()`，settle 后 `done()`（成功/失败都要，
 // 用 try/finally 包住回调，避免回调自己抛错时漏一次 release → 进程挂死）。
+function normalizeDnsError(err: any): any {
+    if (!err || typeof err !== 'object') return err;
+    if (!err.code && typeof err.message === 'string') {
+        const msg = err.message;
+        if (/no record found/i.test(msg)) {
+            err.code = 'ENODATA';
+        } else if (/NXDOMAIN|not found|Non-Existent/i.test(msg)) {
+            err.code = 'ENOTFOUND';
+        } else if (/timed?\s*out/i.test(msg)) {
+            err.code = 'ETIMEOUT';
+        } else if (/refused/i.test(msg)) {
+            err.code = 'ECONNREFUSED';
+        }
+    }
+    return err;
+}
+
 function trackRequest(): () => void {
     const ref = new LoopRef('dns.request');
     ref.acquire();
@@ -353,7 +370,7 @@ function resolveHelper<T>(
             callback(null, transform ? transform(data) : data);
         } finally { done(); }
     }).catch((err: any) => {
-        try { callback(err, null); } finally { done(); }
+        try { callback(normalizeDnsError(err), null); } finally { done(); }
     });
 }
 
@@ -380,7 +397,7 @@ function resolveHelperIp(
             }
         } finally { done(); }
     }).catch((err: any) => {
-        try { callback(err, null); } finally { done(); }
+        try { callback(normalizeDnsError(err), null); } finally { done(); }
     });
 }
 
@@ -427,7 +444,7 @@ function resolveDispatch(resolver: any, hostname: string, rrtype: string | Resol
                 cb(null, res)
             } finally { done(); }
         }).catch((e: any) => {
-            try { cb(e, null); } finally { done(); }
+            try { cb(normalizeDnsError(e), null); } finally { done(); }
         });
     }
 }
@@ -495,7 +512,7 @@ async function handlePromise(fn: (h: string) => Promise<string>, host: string) {
     const done = trackRequest();
     try {
         return JSON.parse(await fn(host));
-    } finally { done(); }
+    } catch (e: any) { throw normalizeDnsError(e); } finally { done(); }
 }
 async function handlePromiseIp(fn: (h: string) => Promise<string>, host: string, options?: any) {
     const done = trackRequest();
@@ -506,13 +523,17 @@ async function handlePromiseIp(fn: (h: string) => Promise<string>, host: string,
             return data.map((d: any) => ({ address: d.address, ttl: d.ttl }));
         }
         return data.map((d: any) => d.address);
-    } finally { done(); }
+    } catch (e: any) { throw normalizeDnsError(e); } finally { done(); }
 }
 
 
 export class ResolverPromises {
     private _r: Resolver;
-    constructor(resolver: Resolver) { this._r = resolver; }
+    constructor(resolverOrOptions?: Resolver | any) {
+        this._r = resolverOrOptions && typeof (resolverOrOptions as any)._nitroResolver === 'object'
+            ? resolverOrOptions
+            : new Resolver(resolverOrOptions);
+    }
 
     getServers() { return this._r.getServers(); }
     setServers(s: string[]) { this._r.setServers(s); }
