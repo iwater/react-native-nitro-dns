@@ -6,3 +6,8 @@ lib
 .git
 .yarn
 mac/
+*.tgz
+*.log
+rust-bundle/target/
+android/libs/
+ios/Frameworks/
