@@ -327,7 +327,7 @@ export function setServers(servers: string[]): void {
 // --------------------------------------------------------------------------
 //
 // 本模块的原生请求是真异步：`resolve*` / `lookupService` 返回的 Promise 要等
-// Rust 侧查完才 settle。宿主（quickjs-jsi 系）的 EventLoop 看不见这个在途请求，
+// Rust 侧查完才 settle。带有空闲退出语义的宿主 EventLoop 看不见这个在途请求，
 // 于是「脚本最后一个动作是 dns.resolve4(host, cb)」时 loop 会**先收泵** →
 // 回调静默丢失（实测：进程 exit 0，cb 根本不跑）。
 // Node 里没有这个问题：在途请求本身就是 loop 的活跃项。
@@ -518,7 +518,7 @@ export function setCachePolicy(policy: CachePolicy, staleTtl: number = 3600): vo
 // ⚠️ 这两个是**第二个入口面**（promises 面），与回调面（resolveHelper /
 // resolveHelperIp / resolveDispatch / lookupService）走的是同一批原生请求，
 // 所以同样必须登记 handle-ref —— 否则在途请求顶不住 loop、promise 永不 settle、
-// 进程静默 exit 0（这条线曾经漏掉，守卫见 quickjs-jsi 的 R29 第 ③ 段）。
+// 进程静默 exit 0。
 // 用 try/finally：回调（这里是 await）自己抛错时也不能漏一次 release。
 async function handlePromise(fn: (h: string) => Promise<string>, host: string) {
     const done = trackRequest();

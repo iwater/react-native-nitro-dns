@@ -3,8 +3,8 @@
  *
  * 背景：Node 里 listening server / connected socket 本身就顶住事件循环
  * （libuv 的 handle ref）。本库的宿主未必有这个语义：
- *   - qjs-node / qjs-run（quickjs-jsi）：EventLoop 在「无待办」时收泵，
- *     提供 globalThis.__qjsHandleRef 供库登记 handle 存活；
+ *   - Embedded JS runtimes with idle loop exit: expose globalThis.__qjsHandleRef
+ *     for active handle tracking;
  *   - React Native：App 生命周期归 OS，JS 空转不退出 —— 没有这个全局，
  *     本类所有方法是 no-op，行为与今天完全一致。
  *

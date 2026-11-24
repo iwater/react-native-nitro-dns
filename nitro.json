@@ -20,7 +20,7 @@
     "cxx": {
         "extraIncludeDirs": [
             "./cpp",
-            "../rust_c_dns/include"
+            "./rust-bundle/include"
         ],
         "extraLibs": [
             "rust_c_dns"
@@ -31,5 +31,8 @@
         "extraFrameworks": [
             "Security"
         ]
-    }
+    },
+    "ignorePaths": [
+        "**/node_modules"
+    ]
 }
