@@ -1,0 +1,4 @@
+# Test threads must run serially because DNS resolver config and cache
+# are process-wide singletons.
+[env]
+RUST_TEST_THREADS = "1"

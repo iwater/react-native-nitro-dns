@@ -1,0 +1,34 @@
+[package]
+name = "rust_c_dns"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rust_c_dns"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+libc = "0.2"
+dns-lookup = "2.0"
+hickory-resolver = { version = "0.24", features = ["system-config", "dns-over-https-rustls", "dns-over-rustls", "dns-over-quic", "webpki-roots"] }
+thiserror = "1.0"
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+hex = "0.4"
+tokio = { version = "1.0", features = ["rt", "macros"] }
+lazy_static = "1.4"
+jni = "0.21"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+lazy_static = "1.4"
+env_logger = "0.10"
+
+[profile.release]
+opt-level = "z"     # 优化代码尺寸
+lto = true          # 启用链接时优化
+codegen-units = 1   # 降低代码生成单元数以提高优化效果
+panic = "abort"     # panic 时直接终止，不进行栈展开
+strip = true        # 自动剥离符号表 (这就是类似 strip 命令的功能)
