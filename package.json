@@ -33,7 +33,7 @@
         "copy-clib-android": "cp ../rust_c_dns/target/aarch64-linux-android/release/librust_c_dns.so android/libs/arm64-v8a/ && cp ../rust_c_dns/target/armv7-linux-androideabi/release/librust_c_dns.so android/libs/armeabi-v7a/ && cp ../rust_c_dns/target/i686-linux-android/release/librust_c_dns.so android/libs/x86/ && cp ../rust_c_dns/target/x86_64-linux-android/release/librust_c_dns.so android/libs/x86_64/ && cp ../rust_c_dns/include/dns_ffi.h cpp/"
     },
     "peerDependencies": {
-        "react-native-nitro-modules": "^0.35.0"
+        "react-native-nitro-modules": ">=0.35.0 <0.38"
     },
     "devDependencies": {
         "@types/jest": "^29.5.12",
